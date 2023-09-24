@@ -1,0 +1,28 @@
+--------------------------------DATAPLANE ROUTER IMPLEMENTATION-----------------------------------------------------------------------
+!Task-uri implementate:toate in afara de LPM eficient, de acolo si ultimele doua teste ce pica.
+Implementarea se poate imparti in doua situatii:primirea unui unui pachet al carui header de ETHERNET incapsuleaza un protocol IPV4 sau 
+care incapsuleaza un protocol ARP.
+Primul pas este sa nu luam in considerare niciun pachet care are ca adresa MAC destinatie orice adresa diferita de a routerului sau de cea de
+broadcast. Atunci cand primim un pachet IPV4, ii extragem header-ul IPV4 si facem verificarile cerute.Dam drop pachetelor cu un ttl de 1 sau 0
+si celor care au checksum-ul gresit (recalculam noi checksum-ul folosind functia data in schelet). De asemenea, cand dam forward field-ul de check
+este recompletat folosind aceeasi functie. Decrementam TTL. Urmeaza partea in care se cauta cea mai buna ruta pentru a da forward pachetului.
+Pentru aceasta, folosesc routing table-ul dat in argv[1].Initializez o structura struct route_table_entry *rtable, pe care o populez folosind
+read read_rtable(), salvandu-mi si "numarul de linii completate in tabel". Pentru a gasi cel mai bun match sortez mai intai tabela folosind qsort
+si caut in mod liniar in tabela sortata.(LPM ineficient). Folosim rezultatul functiei de get_best_route pentru a accesa campurile de next->hop 
+si de interface(pe unde scoatem pachetul spre destinatie). In acest moment se cunoaste adresa IP unde trebuie sa trimitem(next->hop fiind ip-ul),
+insa nu stim MAC-ul. MAC-ul este cautat in tabela ARP(mentinuta dinamic), dupa ip folosind find_arp_entry. Aici intervine o parte din ARP, pentru ca fac un request
+host-ului ce mi-a trimis respectivul pachet pentru a-l interoga despre adresa sa MAC, completand headerul de ARP corespunzator. Inainte de asta bag in coada pachetul pentru care astept 
+raspuns. Am folosit o structura ce mi mentine interfata, len si buf-ul pentru un proces mai usor de eq si deq.
+Cand primesc un raspuns ARP, extrag MAC-ul din campul de ARP(sha) si il bag langa IP-ul corespunzator in tabela ARP. DE asemenea parcurg coada,
+gasesc pachete ce pot fi trimise pentru ca stim adresa mac hardware destinatie. 
+In partea de ICMP, am doua situatii: una pentru echo error unde folosesc functia error() in cazul in care ttl ul este 1 sau 0 plus cazul default
+destination unreachable. In functie, initializez un header de ethernet nou cu campurile aferente, un ip header nou(il copiez pe cel vechi si
+fac mici schimbari), adaug un camp de ICMP cu codul 0 tipul 3 sau 11 apoi adaug ip headerul vechi si inca 8 octeti de dupa acesta.
+Asemanator este si cazul de echo reply dar difera in principiu ce trimitem: nu mai adaug ip ul vechi si acei 8 bytes, icmp headerul este 
+copiat din cel vechi pentru a pastra particularitatile union-ului si fac iar mici schimbari.Nu uit sa resetez TTL, tot_len precum si 
+lungimea pachetului ce difera de la caz la caz.
+La partea de ARP, pe langa request-ul facut atunci cand caut MAC, primim raspunsul si de asemenea putem primi noi un request la care raspundem.
+Se verifica tipul de pachet ARP(1 sau 2). Pentru 2 este acel caz cand ne populam tabela arp si trimitem din coada iar la ARP rquest imi fac
+un nou pachet in care in majoritate schimba "src-dest", insa cel mai important lucru este ca imi completez adresa mea MAC in ->sha.
+Atunci cand e cazul sa trimit un ARP request/reply, ICMP echo reply/error, imi initializez noi headere(malloc), si le adaug header cu header
+intr-un buffer nou.
